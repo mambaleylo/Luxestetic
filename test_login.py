@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Логинимся (данные читаем из credentials.txt, лежащего рядом с этим файлом)
-и скачиваем HTML страницы записей (visit.php) на сегодня, ищем 'Ковтик'.
+Логинимся (данные читаем из credentials.txt) и скачиваем HTML страницы
+записей (visit.php) на сегодня, ищем 'Ковтик'. Результат пишем в result.txt,
+чтобы можно было прочитать одним cat, не разбираясь с docker logs.
 """
 
 import os
@@ -14,8 +15,22 @@ import requests
 BASE_URL = "https://luxestetic.mis.aibolit.by"
 LOGIN_URL = f"{BASE_URL}/index.php"
 
-# Ищем credentials.txt рядом со скриптом (или в /app, на случай другой рабочей директории)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+RESULT_PATH = os.path.join(SCRIPT_DIR, "result.txt")
+
+output_lines = []
+
+
+def log(msg: str):
+    output_lines.append(msg)
+    print(msg)
+
+
+def save_result():
+    with open(RESULT_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(output_lines))
+
+
 CANDIDATE_PATHS = [
     os.path.join(SCRIPT_DIR, "credentials.txt"),
     "/app/credentials.txt",
@@ -36,16 +51,15 @@ for path in CANDIDATE_PATHS:
             break
 
 if not USERNAME or not PASSWORD:
-    print("❌ Не найден файл credentials.txt (или в нём меньше 2 строк).")
-    print("   Проверенные пути:")
+    log("❌ Не найден файл credentials.txt (или в нём меньше 2 строк).")
     for p in CANDIDATE_PATHS:
-        print(f"     {p}: {'есть' if os.path.isfile(p) else 'нет'}")
-    print("   Загрузите credentials.txt рядом с test_login.py через файловый менеджер бота.")
+        log(f"   {p}: {'есть' if os.path.isfile(p) else 'нет'}")
+    save_result()
     sys.exit(1)
 
-print(f"✅ Учётные данные прочитаны из: {used_path}")
-print(f"   Логин: длина {len(USERNAME)} симв.")
-print(f"   Пароль: длина {len(PASSWORD)} симв.")
+log(f"✅ Учётные данные прочитаны из: {used_path}")
+log(f"   Логин: длина {len(USERNAME)} симв.")
+log(f"   Пароль: длина {len(PASSWORD)} симв.")
 
 
 def login(session: requests.Session) -> bool:
@@ -68,22 +82,22 @@ def dump_visit_page(session: requests.Session):
     resp.encoding = "windows-1251"
     html = resp.text
 
-    print(f"===== Длина HTML: {len(html)} символов =====")
+    log(f"===== Длина HTML: {len(html)} символов =====")
 
     idxs = [m.start() for m in re.finditer("Ковтик", html)]
-    print(f"Найдено упоминаний 'Ковтик': {len(idxs)}")
+    log(f"Найдено упоминаний 'Ковтик': {len(idxs)}")
 
     if idxs:
         i = idxs[0]
         start = max(0, i - 800)
         end = min(len(html), i + 800)
-        print("----- КОНТЕКСТ ВОКРУГ 'Ковтик' -----")
-        print(html[start:end])
-        print("----- КОНЕЦ КОНТЕКСТА -----")
+        log("----- КОНТЕКСТ ВОКРУГ 'Ковтик' -----")
+        log(html[start:end])
+        log("----- КОНЕЦ КОНТЕКСТА -----")
     else:
-        print("----- НАЧАЛО HTML (т.к. 'Ковтик' не найден) -----")
-        print(html[:3000])
-        print("----- КОНЕЦ -----")
+        log("----- НАЧАЛО HTML (т.к. 'Ковтик' не найден) -----")
+        log(html[:3000])
+        log("----- КОНЕЦ -----")
 
 
 def main():
@@ -93,12 +107,14 @@ def main():
     })
 
     if not login(session):
-        print("❌ Логин не пройден, останавливаюсь.")
+        log("❌ Логин не пройден, останавливаюсь.")
     else:
-        print("✅ Логин пройден.")
+        log("✅ Логин пройден.")
         dump_visit_page(session)
 
-    print("\nСкрипт диагностики завершён, процесс висит (для bothost).")
+    save_result()
+    log("\nРезультат сохранён в result.txt. Процесс висит (для bothost).")
+    save_result()
     while True:
         time.sleep(3600)
 
